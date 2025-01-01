@@ -37,7 +37,7 @@ sorter.sort_and_format_imports
 
 ## Features
 
-- Sorts require statements alphabetically
+- Sorts import statements correctly as per the norms
 - Groups imports by type (require, require_relative, include, extend)
 - Preserves code structure and spacing
 - Maintains conditional requires

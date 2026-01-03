@@ -34,8 +34,14 @@ RSpec.describe Isort::CLI do
         # Simulate passing the --directory argument to the CLI
         ARGV.replace(["--directory", test_directory])
 
-        # Capture the output of CLI.start
-        output = capture_stdout { Isort::CLI.start }
+        # Capture the output of CLI.start (catch SystemExit since CLI calls exit)
+        output = capture_stdout do
+          begin
+            Isort::CLI.start
+          rescue SystemExit
+            # CLI.start calls exit, which we need to catch
+          end
+        end
 
         # Verify the CLI output
         expect(output).to include("Sorted imports in 2 files in directory: #{test_directory}")
@@ -44,25 +50,26 @@ RSpec.describe Isort::CLI do
         file1_content = File.read(File.join(test_directory, 'file1.rb'))
         file2_content = File.read(File.join(test_directory, 'file2.rb'))
 
+        # Section-based order: stdlib, firstparty (include, extend), localfolder (require_relative)
         expect(file1_content).to eq(<<~RUBY)
           require 'csv'
           require 'json'
-          
+
+          include SomeModule
+
+          extend AnotherModule
+
           require_relative 'a_file'
           require_relative 'b_file'
-          
-          include SomeModule
-          
-          extend AnotherModule
         RUBY
 
         expect(file2_content).to eq(<<~RUBY)
           require 'csv'
           require 'yaml'
-          
-          require_relative 'z_file'
-          
+
           include AnotherModule
+
+          require_relative 'z_file'
         RUBY
       end
     end
@@ -78,11 +85,17 @@ RSpec.describe Isort::CLI do
         # Simulate passing the --directory argument to the CLI
         ARGV.replace(["--directory", test_directory])
 
-        # Capture the output of CLI.start
-        output = capture_stdout { Isort::CLI.start }
+        # Capture the output of CLI.start (catch SystemExit since CLI calls exit)
+        output = capture_stdout do
+          begin
+            Isort::CLI.start
+          rescue SystemExit
+            # CLI.start calls exit, which we need to catch
+          end
+        end
 
-        # Verify the CLI output
-        expect(output).to include("Sorted imports in 0 files in directory: #{test_directory}")
+        # Verify the CLI output - new message when no Ruby files found
+        expect(output).to include("No Ruby files found in #{test_directory}")
 
         # Verify that the non-Ruby file remains unchanged
         expect(File.read(File.join(test_directory, 'file.txt'))).to eq("This is a text file.")

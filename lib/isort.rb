@@ -1,141 +1,287 @@
-require 'optparse'
+# frozen_string_literal: true
+
+require "optparse"
 
 require_relative "isort/version"
-
+require_relative "isort/parser"
+require_relative "isort/import_statement"
+require_relative "isort/import_block"
+require_relative "isort/file_processor"
+require_relative "isort/syntax_validator"
+require_relative "isort/wrap_modes"
 
 module Isort
   class Error < StandardError; end
 
-  class FileSorter
+  # Raised when the input file already has syntax errors
+  class ExistingSyntaxErrors < Error
     def initialize(file_path)
+      super("#{file_path} has existing syntax errors - skipping")
+    end
+  end
+
+  # Raised when isort would introduce syntax errors
+  class IntroducedSyntaxErrors < Error
+    def initialize(file_path)
+      super("isort would introduce syntax errors in #{file_path} - not saving")
+    end
+  end
+
+  # Raised when file contains skip directive
+  class FileSkipped < Error
+    def initialize(file_path, reason = "skip directive")
+      super("#{file_path} skipped due to #{reason}")
+    end
+  end
+
+  # FileSorter provides the public API for sorting imports in a Ruby file
+  class FileSorter
+    attr_reader :file_path
+
+    def initialize(file_path, options = {})
       @file_path = file_path
+      @options = {
+        check: false,
+        diff: false,
+        atomic: false,
+        quiet: false
+      }.merge(options)
+      @processor = FileProcessor.new(file_path, @options)
     end
 
-    def sort_imports
-      # Read the file content
-      lines = File.readlines(@file_path, chomp: true).map { |line| line.gsub("\r", "") }
-
-      # Separate import-related lines and other content
-      imports = lines.select { |line| line =~ /^\s*(require|require_relative|include)\s/ }
-      non_imports = lines.reject { |line| line =~ /^\s*(require|require_relative|include)\s/ }
-
-      # Sort the import lines alphabetically
-      sorted_imports = imports.sort
-
-      # Combine sorted imports with other lines
-      sorted_content = (sorted_imports + non_imports).join
-
-      # Write the sorted content back to the file
-      File.write(@file_path, sorted_content)
-    end
-
+    # Sort and format imports in the file
+    # Returns true if changes were made (or would be made in check mode)
     def sort_and_format_imports
-      # Read the file content
-      lines = File.readlines(@file_path)
-
-      # Separate and group lines
-      requires = extract_lines_with_comments(lines, /^require\s/)
-      require_relatives = extract_lines_with_comments(lines, /^require_relative\s/)
-      includes = extract_lines_with_comments(lines, /^include\s/)
-      extends = extract_lines_with_comments(lines, /^extend\s/)
-      autoloads = extract_lines_with_comments(lines, /^autoload\s/)
-      usings = extract_lines_with_comments(lines, /^using\s/)
-      others = lines.reject { |line| [requires, require_relatives, includes, extends, autoloads, usings].flatten.include?(line) }
-
-      # Format and sort each group
-      formatted_imports = []
-      formatted_imports << format_group("require", requires)
-      formatted_imports << format_group("require_relative", require_relatives)
-      formatted_imports << format_group("include", includes)
-      formatted_imports << format_group("extend", extends)
-      formatted_imports << format_group("autoload", autoloads)
-      formatted_imports << format_group("using", usings)
-
-      return if [requires, require_relatives, includes, extends, autoloads, usings].all?(&:empty?)
-
-      # Combine formatted imports with the rest of the file
-      sorted_content = "#{formatted_imports.reject(&:empty?).join("\n")}\n#{others.join}".strip
-
-      # Add a trailing newline only if imports exist
-      sorted_content = "#{sorted_content.rstrip}\n" if !formatted_imports.empty? && !sorted_content.empty?
-
-      # Write the sorted content back to the file only if imports exist
-      File.write(@file_path, sorted_content) unless formatted_imports.empty? && sorted_content.empty?
+      @processor.process
+    rescue Errno::ENOENT
+      raise
+    rescue ExistingSyntaxErrors, IntroducedSyntaxErrors, FileSkipped
+      raise
     rescue StandardError => e
-      puts "An error occurred: #{e.message}"
+      puts "An error occurred: #{e.message}" unless @options[:quiet]
       raise
     end
 
-    private
-
-    def extract_lines(lines, regex)
-      lines.select { |line| line =~ regex }
+    # Check if file would change (dry-run)
+    def check
+      @processor.check
     end
 
-    def extract_lines_with_comments(lines, regex)
-      grouped_lines = []
-      buffer = []
-
-      lines.each do |line|
-        if line.strip.start_with?("#") || line.strip.empty?
-          # If the line is a comment or blank, add it to the buffer
-          buffer << line
-        elsif line =~ regex
-          # If it's an import line matching the regex, attach the buffer as comments
-          grouped_lines << (buffer + [line])
-          buffer = [] # Reset buffer
-        else
-          # If it's a non-matching line, reset the buffer
-          buffer = []
-        end
-      end
-
-      grouped_lines
+    # Get diff of changes without applying
+    def diff
+      @processor.diff
     end
 
-    def format_group(type, grouped_lines)
-      return [] if grouped_lines.empty?
-
-      # Flatten and sort each group by the import line
-      grouped_lines
-        .sort_by { |lines| lines.last.strip } # Sort by the actual import statement
-        .map { |lines| lines.join }          # Combine comments with the import
-        .map(&:strip)                        # Remove trailing newlines
-        .join("\n")                          # Join all imports in the group with newlines
-        .concat("\n")                        # Add a newline between groups
+    # Legacy method for backward compatibility
+    # @deprecated Use sort_and_format_imports instead
+    def sort_imports
+      sort_and_format_imports
     end
-
   end
 
+  # CLI handles command-line interface for the isort gem
   class CLI
     def self.start
-      options = {}
-      OptionParser.new do |opts|
-        opts.banner = "Usage: sort [options]"
+      options = {
+        check: false,
+        diff: false,
+        atomic: false,
+        quiet: false,
+        verbose: false
+      }
 
-        opts.on("-fFILE", "--file=FILE", "File to sort") do |file|
+      parser = OptionParser.new do |opts|
+        opts.banner = "Usage: isort [options] [file_or_directory]"
+        opts.separator ""
+        opts.separator "Options:"
+
+        opts.on("-f", "--file=FILE", "File to sort") do |file|
           options[:file] = file
         end
-        opts.on("-dDIRECTORY", "--directory=DIRECTORY", "Specify a directory to sort") do |dir|
+
+        opts.on("-d", "--directory=DIRECTORY", "Directory to sort (recursive)") do |dir|
           options[:directory] = dir
         end
-      end.parse!
+
+        opts.separator ""
+        opts.separator "Safety options:"
+
+        opts.on("-c", "--check", "--check-only",
+                "Check if files need sorting without modifying them.",
+                "Returns exit code 0 if sorted, 1 if changes needed.") do
+          options[:check] = true
+        end
+
+        opts.on("--diff", "Show diff of changes without modifying files.") do
+          options[:diff] = true
+        end
+
+        opts.on("--atomic", "Validate Ruby syntax before and after sorting.",
+                "Won't save if it would introduce syntax errors.") do
+          options[:atomic] = true
+        end
+
+        opts.separator ""
+        opts.separator "Output options:"
+
+        opts.on("-q", "--quiet", "Suppress all output except errors.") do
+          options[:quiet] = true
+        end
+
+        opts.on("--verbose", "Show detailed output.") do
+          options[:verbose] = true
+        end
+
+        opts.separator ""
+        opts.separator "Information:"
+
+        opts.on("-h", "--help", "Show this help message.") do
+          puts opts
+          exit
+        end
+
+        opts.on("-v", "--version", "Show version.") do
+          puts "isort #{Isort::VERSION}"
+          exit
+        end
+      end
+
+      # Parse arguments
+      parser.parse!
+
+      # Handle positional arguments
+      if ARGV.any? && !options[:file] && !options[:directory]
+        target = ARGV.first
+        if File.directory?(target)
+          options[:directory] = target
+        elsif File.file?(target)
+          options[:file] = target
+        else
+          puts "Error: #{target} is not a valid file or directory"
+          exit 1
+        end
+      end
 
       if options[:file]
-        sorter = FileSorter.new(options[:file])
-        sorter.sort_and_format_imports
-        puts "Imports sorted in #{options[:file]}"
+        exit_code = process_file(options[:file], options)
+        exit exit_code
       elsif options[:directory]
-        count = 0
-        Dir.glob("#{options[:directory]}/**/*.rb").each do |file|
-          count += 1
-          sorter = FileSorter.new(file)
-          sorter.sort_and_format_imports
-        end
-        puts "Sorted imports in #{count} files in directory: #{options[:directory]}"
+        exit_code = process_directory(options[:directory], options)
+        exit exit_code
       else
-        puts "Please specify a file using -f or --file"
+        puts parser
+        exit 1
       end
+    end
+
+    def self.process_file(file, options)
+      unless File.exist?(file)
+        puts "Error: File not found: #{file}" unless options[:quiet]
+        return 1
+      end
+
+      processor = FileProcessor.new(file, options)
+
+      if options[:check]
+        return handle_check(file, processor, options)
+      elsif options[:diff]
+        return handle_diff(file, processor, options)
+      else
+        return handle_sort(file, processor, options)
+      end
+    rescue ExistingSyntaxErrors => e
+      puts "ERROR: #{e.message}" unless options[:quiet]
+      return 1
+    rescue IntroducedSyntaxErrors => e
+      puts "ERROR: #{e.message}" unless options[:quiet]
+      return 1
+    rescue FileSkipped => e
+      puts e.message if options[:verbose]
+      return 0
+    rescue StandardError => e
+      puts "Error processing #{file}: #{e.message}" unless options[:quiet]
+      return 1
+    end
+
+    def self.handle_check(file, processor, options)
+      would_change = processor.check
+      if would_change
+        puts "#{file} - imports are not sorted" unless options[:quiet]
+        1
+      else
+        puts "#{file} - imports are sorted" if options[:verbose]
+        0
+      end
+    end
+
+    def self.handle_diff(file, processor, options)
+      diff_output = processor.diff
+      if diff_output && !diff_output.empty?
+        puts diff_output
+        1
+      else
+        puts "#{file} - no changes" if options[:verbose]
+        0
+      end
+    end
+
+    def self.handle_sort(file, processor, options)
+      changed = processor.process
+      if changed
+        puts "Imports sorted in #{file}" unless options[:quiet]
+      else
+        puts "#{file} - no changes needed" if options[:verbose]
+      end
+      0
+    end
+
+    def self.process_directory(dir, options)
+      unless Dir.exist?(dir)
+        puts "Error: Directory not found: #{dir}" unless options[:quiet]
+        return 1
+      end
+
+      files = Dir.glob("#{dir}/**/*.rb")
+      if files.empty?
+        puts "No Ruby files found in #{dir}" unless options[:quiet]
+        return 0
+      end
+
+      total = 0
+      changed = 0
+      errors = 0
+      error_messages = []
+
+      files.each do |file|
+        result = process_file(file, options.merge(quiet: true))
+        total += 1
+        if result == 0
+          changed += 1 if options[:check] || options[:diff]
+        else
+          errors += 1
+        end
+      rescue StandardError => e
+        errors += 1
+        error_messages << "#{file}: #{e.message}"
+      end
+
+      unless options[:quiet]
+        if options[:check]
+          unsorted = total - changed
+          puts "Checked #{total} files: #{changed} sorted, #{unsorted} need sorting"
+        elsif options[:diff]
+          puts "Checked #{total} files: #{total - changed} would change"
+        else
+          puts "Sorted imports in #{total} files in directory: #{dir}"
+        end
+
+        if error_messages.any?
+          puts "\nErrors encountered:"
+          error_messages.each { |err| puts "  - #{err}" }
+        end
+      end
+
+      errors > 0 || (options[:check] && changed < total) ? 1 : 0
     end
   end
 end

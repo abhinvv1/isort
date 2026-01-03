@@ -1,16 +1,22 @@
-require 'isort'
+# frozen_string_literal: true
 
+require "isort"
+require "fileutils"
 
 RSpec.describe Isort::FileSorter do
   let(:file_path) { "spec/fixtures/sample.rb" }
   let(:file_sorter) { described_class.new(file_path) }
 
+  before do
+    FileUtils.mkdir_p("spec/fixtures")
+  end
+
   after do
     File.delete(file_path) if File.exist?(file_path)
   end
 
-  describe '#sort_and_format_imports' do
-    context 'with basic import sorting' do
+  describe "#sort_and_format_imports" do
+    context "with basic import sorting" do
       before do
         File.write(file_path, <<~RUBY)
           require 'json'
@@ -21,17 +27,21 @@ RSpec.describe Isort::FileSorter do
         RUBY
       end
 
-      it "sorts imports alphabetically" do
+      it "sorts imports alphabetically and groups by section then type" do
         file_sorter.sort_and_format_imports
 
+        # With section-based grouping:
+        # 1. stdlib requires (csv, json)
+        # 2. firstparty includes (SomeModule)
+        # 3. localfolder require_relatives (a_file, b_file)
         expect(File.read(file_path)).to eq(<<~RUBY)
           require 'csv'
           require 'json'
-          
+
+          include SomeModule
+
           require_relative 'a_file'
           require_relative 'b_file'
-          
-          include SomeModule
         RUBY
       end
 
@@ -39,12 +49,12 @@ RSpec.describe Isort::FileSorter do
         sorted_content = <<~RUBY
           require 'csv'
           require 'json'
-          
+
+          include SomeModule
+
           require_relative 'a_file'
           require_relative 'b_file'
-          
-          include SomeModule
-      RUBY
+        RUBY
 
         File.write(file_path, sorted_content)
         file_sorter.sort_and_format_imports
@@ -82,18 +92,20 @@ RSpec.describe Isort::FileSorter do
 
         file_sorter.sort_and_format_imports
 
+        # Section-based order: stdlib, firstparty, localfolder
         expect(File.read(file_path)).to eq(<<~RUBY)
           require 'csv' # CSV handler
           require 'json' # JSON parser
-          
+
+          include SomeModule # Include module
+
           require_relative 'a_file' # Another file
           require_relative 'b_file' # Custom file
-          
-          include SomeModule # Include module
         RUBY
       end
     end
-    context 'when the file contains unsorted imports' do
+
+    context "when the file contains unsorted imports" do
       before do
         File.write(file_path, <<~RUBY)
           require 'json'
@@ -102,7 +114,7 @@ RSpec.describe Isort::FileSorter do
         RUBY
       end
 
-      it 'sorts the imports alphabetically' do
+      it "sorts the imports alphabetically" do
         sorter = described_class.new(file_path)
         sorter.sort_and_format_imports
 
@@ -114,12 +126,12 @@ RSpec.describe Isort::FileSorter do
       end
     end
 
-    context 'when the file contains no imports' do
+    context "when the file contains no imports" do
       before do
         File.write(file_path, "puts 'Hello, world!'")
       end
 
-      it 'does not modify the file' do
+      it "does not modify the file" do
         sorter = described_class.new(file_path)
         sorter.sort_and_format_imports
 
@@ -127,12 +139,12 @@ RSpec.describe Isort::FileSorter do
       end
     end
 
-    context 'when the file is empty' do
+    context "when the file is empty" do
       before do
         File.write(file_path, "")
       end
 
-      it 'does not raise an error or modify the file' do
+      it "does not raise an error or modify the file" do
         sorter = described_class.new(file_path)
         sorter.sort_and_format_imports
 
@@ -140,7 +152,7 @@ RSpec.describe Isort::FileSorter do
       end
     end
 
-    context 'when the file has non-import lines mixed with imports' do
+    context "when the file has non-import lines mixed with imports" do
       before do
         File.write(file_path, <<~RUBY)
           require 'json'
@@ -150,24 +162,25 @@ RSpec.describe Isort::FileSorter do
         RUBY
       end
 
-      it 'sorts the imports but leaves non-import lines untouched' do
+      it "sorts imports within each contiguous block separately" do
         sorter = described_class.new(file_path)
         sorter.sort_and_format_imports
 
+        # Code line breaks the import block, so imports before and after
+        # are treated as separate blocks
         expect(File.read(file_path)).to eq(<<~RUBY)
-          require 'csv'
           require 'json'
-          
-          require_relative 'a_file'
-          
           puts 'This is a test.'
+          require 'csv'
+
+          require_relative 'a_file'
         RUBY
       end
     end
   end
 
-  describe '#sort_and_format_imports' do
-    context 'with advanced formatting' do
+  describe "#sort_and_format_imports" do
+    context "with advanced formatting" do
       before do
         File.write(file_path, <<~RUBY)
           require 'json'
@@ -181,27 +194,31 @@ RSpec.describe Isort::FileSorter do
         RUBY
       end
 
-      it "sorts and formats imports with section headers" do
+      it "sorts and formats imports with section-based grouping" do
         file_sorter.sort_and_format_imports
 
+        # Section-based order:
+        # 1. stdlib (csv, json)
+        # 2. firstparty (include, extend, autoload, using)
+        # 3. localfolder (require_relative)
         expect(File.read(file_path)).to eq(<<~RUBY)
           require 'csv'
           require 'json'
-          
+
+          include SomeModule
+
+          extend AnotherModule
+
+          autoload :CSV, 'csv'
+
+          using SomeRefinement
+
           require_relative 'a_file'
           require_relative 'b_file'
-          
-          include SomeModule
-          
-          extend AnotherModule
-          
-          autoload :CSV, 'csv'
-          
-          using SomeRefinement
         RUBY
       end
 
-      it "handles mixed case requires" do
+      it "handles mixed case requires within same section" do
         File.write(file_path, <<~RUBY)
           require 'JSON'
           require 'Csv'
@@ -210,10 +227,13 @@ RSpec.describe Isort::FileSorter do
 
         file_sorter.sort_and_format_imports
 
+        # stringio is stdlib, JSON and Csv are thirdparty (not lowercase stdlib names)
+        # Alphabetically sorted within each section
         expect(File.read(file_path)).to eq(<<~RUBY)
+          require 'stringio'
+
           require 'Csv'
           require 'JSON'
-          require 'stringio'
         RUBY
       end
 
@@ -229,62 +249,17 @@ RSpec.describe Isort::FileSorter do
 
         expect(File.read(file_path)).to eq(<<~RUBY)
           require 'json'
-          
+
           include ModuleA
           include ModuleB
           include ModuleC
         RUBY
       end
-
-      # it "preserves spacing between different code sections" do
-      #   File.write(file_path, <<~RUBY)
-      #     require 'json'
-      #
-      #     include ModuleA
-      #
-      #     class MyClass
-      #       extend ModuleB
-      #     end
-      #   RUBY
-      #
-      #   file_sorter.sort_and_format_imports
-
-      #   expect(File.read(file_path)).to eq(<<~RUBY)
-      #     require 'json'
-      #
-      #
-      #     include ModuleA
-      #     class MyClass
-      #       extend ModuleB
-      #     end
-      #   RUBY
-      # end
-
-      # it "handles conditional requires" do
-      #   File.write(file_path, <<~RUBY)
-      #     if RUBY_VERSION >= '2.7'
-      #       require 'json'
-      #     else
-      #       require 'oj'
-      #     end
-      #     require 'csv'
-      #   RUBY
-      #
-      #   file_sorter.sort_and_format_imports
-      #
-      #   expect(File.read(file_path)).to eq(<<~RUBY)
-      #     require 'csv'
-      #     if RUBY_VERSION >= '2.7'
-      #       require 'json'
-      #     else
-      #       require 'oj'
-      #     end
-      #   RUBY
-      # end
     end
   end
-  describe '#sort_and_format_imports' do
-    it "preserves spacing between different code sections and nested extends" do
+
+  describe "#sort_and_format_imports" do
+    it "preserves nested extends inside classes" do
       File.write(file_path, <<~RUBY)
         require 'json'
 
@@ -300,16 +275,16 @@ RSpec.describe Isort::FileSorter do
 
       expect(File.read(file_path)).to eq(<<~RUBY)
         require 'json'
-        
+
         include ModuleA
-        
+
         class MyClass
           extend ModuleB
         end
       RUBY
     end
 
-    it "handles conditional requires" do
+    it "preserves conditional imports structure" do
       File.write(file_path, <<~RUBY)
         require 'csv'
         if RUBY_VERSION >= '2.7'
@@ -321,9 +296,9 @@ RSpec.describe Isort::FileSorter do
 
       file_sorter.sort_and_format_imports
 
+      # Conditional imports stay in place, top-level sorted
       expect(File.read(file_path)).to eq(<<~RUBY)
         require 'csv'
-        
         if RUBY_VERSION >= '2.7'
           require 'json'
         else
@@ -339,7 +314,7 @@ RSpec.describe Isort::FileSorter do
 
         module OuterModule
           include ModuleA
-          
+
           class InnerClass
             extend ModuleB
           end
@@ -352,10 +327,9 @@ RSpec.describe Isort::FileSorter do
         require 'csv'
         require 'json'
 
-
         module OuterModule
           include ModuleA
-          
+
           class InnerClass
             extend ModuleB
           end
@@ -363,169 +337,111 @@ RSpec.describe Isort::FileSorter do
       RUBY
     end
   end
-  context 'when the file contains various types of imports' do
+
+  context "when the file contains various types of imports" do
     before do
       File.write(file_path, <<~RUBY)
-          include SomeModule
-          require 'json'
-          require_relative 'b_file'
-          autoload :CSV, 'csv'
-          using SomeRefinement
-          extend AnotherModule
-          require 'csv'
-          require_relative 'a_file'
-        RUBY
+        include SomeModule
+        require 'json'
+        require_relative 'b_file'
+        autoload :CSV, 'csv'
+        using SomeRefinement
+        extend AnotherModule
+        require 'csv'
+        require_relative 'a_file'
+      RUBY
     end
 
-    it 'groups, sorts, and formats the imports correctly' do
+    it "groups, sorts, and formats the imports correctly with section-based grouping" do
+      sorter = described_class.new(file_path)
+      sorter.sort_and_format_imports
+
+      # Section-based order:
+      # 1. stdlib (csv, json)
+      # 2. firstparty (include, extend, autoload, using - sorted by type then alpha)
+      # 3. localfolder (require_relative)
+      expect(File.read(file_path)).to eq(<<~RUBY)
+        require 'csv'
+        require 'json'
+
+        include SomeModule
+
+        extend AnotherModule
+
+        autoload :CSV, 'csv'
+
+        using SomeRefinement
+
+        require_relative 'a_file'
+        require_relative 'b_file'
+      RUBY
+    end
+  end
+
+  context "when the file contains only non-import lines" do
+    before do
+      File.write(file_path, <<~RUBY)
+        puts 'Hello, world!'
+        def hello; puts 'Hi'; end
+      RUBY
+    end
+
+    it "does not modify the file" do
       sorter = described_class.new(file_path)
       sorter.sort_and_format_imports
 
       expect(File.read(file_path)).to eq(<<~RUBY)
-          require 'csv'
-          require 'json'
-          
-          require_relative 'a_file'
-          require_relative 'b_file'
-          
-          include SomeModule
-          
-          extend AnotherModule
-          
-          autoload :CSV, 'csv'
-          
-          using SomeRefinement
-        RUBY
+        puts 'Hello, world!'
+        def hello; puts 'Hi'; end
+      RUBY
     end
   end
 
-  # context 'when the file contains duplicate imports' do
-  #   before do
-  #     File.write(file_path, <<~RUBY)
-  #         require 'json'
-  #         require_relative 'b_file'
-  #         require 'json'
-  #         require_relative 'a_file'
-  #         require_relative 'b_file'
-  #       RUBY
-  #   end
-  #
-  #   it 'removes duplicate imports' do
-  #     sorter = described_class.new(file_path)
-  #     sorter.sort_and_format_imports
-  #
-  #     expect(File.read(file_path)).to eq(<<~RUBY)
-  #         require 'json'
-  #
-  #         require_relative 'a_file'
-  #         require_relative 'b_file'
-  #       RUBY
-  #   end
-  # end
-
-  context 'when the file contains only non-import lines' do
+  context "when the file contains blank lines and comments" do
     before do
       File.write(file_path, <<~RUBY)
-          puts 'Hello, world!'
-          def hello; puts 'Hi'; end
-        RUBY
+        # This is a comment
+        require 'yaml'
+
+        require 'json'
+        # Another comment
+        require_relative 'b_file'
+      RUBY
     end
 
-    it 'does not modify the file' do
+    it "preserves comments while sorting imports" do
       sorter = described_class.new(file_path)
       sorter.sort_and_format_imports
 
       expect(File.read(file_path)).to eq(<<~RUBY)
-          puts 'Hello, world!'
-          def hello; puts 'Hi'; end
-        RUBY
+        require 'json'
+        # This is a comment
+        require 'yaml'
+
+        # Another comment
+        require_relative 'b_file'
+      RUBY
     end
   end
 
-  context 'when the file contains blank lines and comments' do
+  context "when the file has load statements mixed with imports" do
     before do
       File.write(file_path, <<~RUBY)
-          # This is a comment
-          require 'yaml'
-
-          require 'json'
-          # Another comment
-          require_relative 'b_file'
-        RUBY
+        load 'some_file'
+        require 'json'
+      RUBY
     end
 
-    it 'preserves comments and blank lines while sorting imports' do
+    it "treats load as non-import code" do
       sorter = described_class.new(file_path)
       sorter.sort_and_format_imports
 
+      # load is not an import, so it stays in place
+      # require after load is a separate block
       expect(File.read(file_path)).to eq(<<~RUBY)
-          require 'json'
-          # This is a comment
-          require 'yaml'
-          
-          # Another comment
-          require_relative 'b_file'
-        RUBY
+        load 'some_file'
+        require 'json'
+      RUBY
     end
   end
-
-  context 'when the file contains unsupported lines' do
-    before do
-      File.write(file_path, <<~RUBY)
-          load 'some_file'
-          require 'json'
-        RUBY
-    end
-
-    it 'leaves unsupported lines untouched' do
-      sorter = described_class.new(file_path)
-      sorter.sort_and_format_imports
-
-      expect(File.read(file_path)).to eq(<<~RUBY)
-          require 'json'
-          
-          load 'some_file'
-        RUBY
-    end
-  end
-
-  # context 'when the file has mixed indentation and formatting' do
-  #   before do
-  #     File.write(file_path, <<~RUBY)
-  #         require 'yaml'
-  #         require_relative   'z_file'
-  #         include  AnotherModule
-  #         require   'csv'
-  #       RUBY
-  #   end
-  #
-  #   it 'normalizes formatting and sorts the imports' do
-  #     sorter = described_class.new(file_path)
-  #     sorter.sort_and_format_imports
-  #
-  #     expect(File.read(file_path)).to eq(<<~RUBY)
-  #         require 'csv'
-  #         require 'yaml'
-  #         require_relative 'z_file'
-  #         include AnotherModule
-  #       RUBY
-  #   end
-  # end
-
-  # context 'when the file contains a mix of Unix and Windows line endings' do
-  #   before do
-  #     File.write(file_path, "require 'json'\r\nrequire 'csv'\nrequire_relative 'file'")
-  #   end
-  #
-  #   it 'handles line endings correctly' do
-  #     sorter = described_class.new(file_path)
-  #     sorter.sort_and_format_imports
-  #
-  #     expect(File.read(file_path)).to eq(<<~RUBY.chomp)
-  #         require 'csv'
-  #         require 'json'
-  #         require_relative 'file'
-  #       RUBY
-  #   end
-  # end
 end

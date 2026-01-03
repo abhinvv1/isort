@@ -11,12 +11,16 @@ Gem::Specification.new do |spec|
   spec.executables = ["isort"]
   spec.require_paths = ["lib"]
   spec.bindir = "exe"
-  spec.summary = "A Ruby gem for sorting and organizing import statements"
-  spec.description = "Isort automatically sorts and organizes your Ruby imports, including require,"\
-    " require_relative, include, using, and extend statements."\
-    "Has the ability to group different types of imports together. "\
-    "It can process single files or entire directories directly through"\
-    "command-line interface, and preserve the code comments and inline documentation"
+  spec.summary = "Automatic import sorting for Ruby - sort require, include, extend and more"
+  spec.description = <<~DESC.gsub("\n", " ").strip
+    isort automatically sorts and organizes import statements in Ruby files.
+    It groups imports into sections (stdlib, third-party, first-party, local),
+    sorts alphabetically within each section, removes duplicates, and preserves comments.
+    Supports require, require_relative, include, extend, autoload, and using statements.
+    Features include: check mode for CI integration, diff preview, atomic mode with
+    syntax validation, skip directives for fine-grained control, and recursive
+    directory processing. Inspired by Python's isort.
+  DESC
 
   spec.homepage = "https://github.com/abhinvv1/isort"
   spec.license = "MIT"

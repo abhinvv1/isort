@@ -253,6 +253,9 @@ bundle install
 # Run tests
 bundle exec rspec
 
+# Run robocop lint checks
+bundle exec rubocop
+
 # Test locally without installing
 bundle exec ruby -Ilib -e "require 'isort'; Isort::CLI.start" -- path/to/file.rb
 ```

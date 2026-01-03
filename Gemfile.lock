@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    isort (0.2.0)
+    isort (0.2.1)
       optparse (~> 0.2.0)
 
 GEM
@@ -50,6 +50,7 @@ GEM
 
 PLATFORMS
   -darwin-24
+  x86_64-linux
 
 DEPENDENCIES
   bundler (~> 2.0)

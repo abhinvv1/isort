@@ -16,10 +16,9 @@ module Isort
       using: 5
     }.freeze
 
-    SKIP_PATTERN = /#\s*isort:\s*skip\b/i.freeze
+    SKIP_PATTERN = /#\s*isort:\s*skip\b/i
 
-    attr_reader :type, :raw_line, :sort_key, :leading_comments, :indentation
-    attr_reader :skip_sorting, :section
+    attr_reader :type, :raw_line, :sort_key, :leading_comments, :indentation, :skip_sorting, :section
 
     def initialize(raw_line:, type:, leading_comments: [], indentation: "")
       @raw_line = raw_line

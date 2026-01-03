@@ -25,8 +25,8 @@ module Isort
     MAGIC_COMMENT_PATTERN = /^#\s*(?:encoding|coding|frozen_string_literal|warn_indent|shareable_constant_value):/i
 
     # Skip directive patterns
-    SKIP_LINE_PATTERN = /#\s*isort:\s*skip\b/i.freeze
-    SKIP_FILE_PATTERN = /^#\s*isort:\s*skip_file\b/i.freeze
+    SKIP_LINE_PATTERN = /#\s*isort:\s*skip\b/i
+    SKIP_FILE_PATTERN = /^#\s*isort:\s*skip_file\b/i
 
     def initialize
       @line_number = 0
@@ -71,7 +71,7 @@ module Isort
 
     private
 
-    def classify_comment(line, stripped)
+    def classify_comment(_line, stripped)
       # Check for shebang on first line
       return :shebang if @line_number == 1 && stripped.start_with?("#!")
 
@@ -106,7 +106,9 @@ module Isort
       # and the import keyword appears inside quotes, it's not a real import
 
       # Pattern: variable = "...require..." or variable = '...require...'
-      return true if stripped.match?(/^\w+\s*=\s*['"].*(?:require|require_relative|include|extend|autoload|using).*['"]/)
+      if stripped.match?(/^\w+\s*=\s*['"].*(?:require|require_relative|include|extend|autoload|using).*['"]/)
+        return true
+      end
 
       # Pattern: method_call "...require..." or method_call '...require...'
       # e.g., puts "require 'json'"
@@ -128,9 +130,7 @@ module Isort
 
           # If keyword appears after a quote, it might be inside a string
           # But we need to ensure it's not at the start (real import)
-          if first_quote_pos && keyword_pos > first_quote_pos && keyword_pos > 0
-            return true
-          end
+          return true if first_quote_pos && keyword_pos > first_quote_pos && keyword_pos.positive?
         end
       end
 

@@ -9,8 +9,8 @@ module Isort
   # Main orchestrator for processing Ruby files
   # Finds import blocks, sorts them, and reconstructs the file
   class FileProcessor
-    SKIP_FILE_PATTERN = /^#\s*isort:\s*skip_file\b/i.freeze
-    SKIP_LINE_PATTERN = /#\s*isort:\s*skip\b/i.freeze
+    SKIP_FILE_PATTERN = /^#\s*isort:\s*skip_file\b/i
+    SKIP_LINE_PATTERN = /#\s*isort:\s*skip\b/i
 
     def initialize(file_path, options = {})
       @file_path = file_path
@@ -33,9 +33,7 @@ module Isort
       check_skip_file_directive!(original_content)
 
       # Atomic mode: validate original syntax first
-      if @options[:atomic]
-        validate_original_syntax!(original_content)
-      end
+      validate_original_syntax!(original_content) if @options[:atomic]
 
       lines = parse_lines(original_content)
       return false if lines.empty?
@@ -56,9 +54,7 @@ module Isort
       return false if new_content == original_content
 
       # Atomic mode: validate new syntax before writing
-      if @options[:atomic]
-        validate_new_syntax!(new_content)
-      end
+      validate_new_syntax!(new_content) if @options[:atomic]
 
       # Write the file
       write_file(new_content)
@@ -68,6 +64,7 @@ module Isort
       if e.message.include?("invalid byte sequence")
         raise Encoding::CompatibilityError, "Invalid encoding in #{@file_path}: #{e.message}"
       end
+
       raise
     end
 
@@ -151,22 +148,20 @@ module Isort
     def check_skip_file_directive!(content)
       # Check first 50 lines for skip_file directive
       content.lines.first(50).each do |line|
-        if line.match?(SKIP_FILE_PATTERN)
-          raise FileSkipped.new(@file_path, "isort:skip_file directive")
-        end
+        raise FileSkipped.new(@file_path, "isort:skip_file directive") if line.match?(SKIP_FILE_PATTERN)
       end
     end
 
     def validate_original_syntax!(content)
-      unless SyntaxValidator.valid?(content)
-        raise ExistingSyntaxErrors.new(@file_path)
-      end
+      return if SyntaxValidator.valid?(content)
+
+      raise ExistingSyntaxErrors, @file_path
     end
 
     def validate_new_syntax!(content)
-      unless SyntaxValidator.valid?(content)
-        raise IntroducedSyntaxErrors.new(@file_path)
-      end
+      return if SyntaxValidator.valid?(content)
+
+      raise IntroducedSyntaxErrors, @file_path
     end
 
     def generate_diff(original, modified)
@@ -354,12 +349,12 @@ module Isort
       # Include trailing comments if they exist
       if current_block && !current_block.empty?
         # Add any trailing comments to the last statement
-        if pending_comments.any?
-          # These are orphan comments at end - don't include in block range
-          current_block.end_line = lines.size - 1 - pending_blanks.size - pending_comments.size
-        else
-          current_block.end_line = lines.size - 1 - pending_blanks.size
-        end
+        current_block.end_line = if pending_comments.any?
+                                   # These are orphan comments at end - don't include in block range
+                                   lines.size - 1 - pending_blanks.size - pending_comments.size
+                                 else
+                                   lines.size - 1 - pending_blanks.size
+                                 end
         blocks << { block: current_block, start_line: current_block.start_line, end_line: current_block.end_line }
       end
 
@@ -394,7 +389,7 @@ module Isort
 
           # If lines between consecutive import blocks are only blank lines,
           # normalize to a single blank line
-          if block_index > 0 && lines_between.all? { |l| l.strip.empty? }
+          if block_index.positive? && lines_between.all? { |l| l.strip.empty? }
             # Add single blank line if there were any blanks
             result << "\n" unless lines_between.empty?
           else

@@ -122,20 +122,16 @@ module Isort
         # Add blank line between different sections (highest priority separator)
         if current_section && current_section != stmt.section && !result.empty?
           # Add blank line between sections (unless last line is already blank)
-          unless result.last&.strip&.empty?
-            result << "#{@indentation}\n"
-          end
+          result << "#{@indentation}\n" unless result.last&.strip&.empty?
         # Add blank line between different import types within the same section
         elsif current_type && current_type != stmt.type && current_section == stmt.section && !result.empty?
           # Only add blank line if last line isn't already blank
-          unless result.last&.strip&.empty?
-            result << "#{@indentation}\n"
-          end
+          result << "#{@indentation}\n" unless result.last&.strip&.empty?
         elsif current_type && current_type == stmt.type && non_blank_comments.any?
           # Same type but has comments - might need blank line before the comment
           # Only add if last line isn't blank
-          unless result.last&.strip&.empty?
-            result << "#{@indentation}\n" if stmt.leading_comments.any? { |c| c.strip.empty? }
+          if !result.last&.strip&.empty? && stmt.leading_comments.any? { |c| c.strip.empty? }
+            result << "#{@indentation}\n"
           end
         end
 

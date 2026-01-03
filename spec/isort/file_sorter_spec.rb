@@ -12,7 +12,7 @@ RSpec.describe Isort::FileSorter do
   end
 
   after do
-    File.delete(file_path) if File.exist?(file_path)
+    FileUtils.rm_f(file_path)
   end
 
   describe "#sort_and_format_imports" do

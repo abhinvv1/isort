@@ -169,7 +169,7 @@ module Isort
         imports.each_with_index do |imp, idx|
           separator = idx < imports.size - 1 ? ", " : ""
 
-          if idx == 0
+          if idx.zero?
             current_line += imp + separator
           elsif current_line.length + imp.length + separator.length > line_length
             lines << current_line.rstrip.chomp(",")
@@ -221,14 +221,14 @@ module Isort
         imports.each_with_index do |imp, idx|
           separator = idx < imports.size - 1 ? ", " : ""
 
-          if current_line.length + imp.length + separator.length > line_length
-            current_line += "\n#{inner_indent}#{imp}#{separator}"
-          else
-            current_line += imp + separator
-          end
+          current_line += if current_line.length + imp.length + separator.length > line_length
+                            "\n#{inner_indent}#{imp}#{separator}"
+                          else
+                            imp + separator
+                          end
         end
 
-        current_line + ")"
+        "#{current_line})"
       end
 
       def format_noqa(imports, indent)

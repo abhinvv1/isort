@@ -105,7 +105,7 @@ RSpec.describe "Isort Safety Features" do
 
         expect(diff).not_to be_nil
         expect(diff).to include("-require 'yaml'")
-        expect(diff).to include("+require 'yaml'")  # yaml moves down
+        expect(diff).to include("+require 'yaml'") # yaml moves down
       ensure
         file.close
         file.unlink

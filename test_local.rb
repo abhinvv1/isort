@@ -46,11 +46,7 @@ puts would_change ? "File needs sorting" : "File is already sorted"
 puts "\n📝 Running --diff mode:"
 puts "-" * 40
 diff_output = processor.diff
-if diff_output
-  puts diff_output
-else
-  puts "No changes needed"
-end
+puts diff_output || "No changes needed"
 
 puts "\n✅ Running sort:"
 puts "-" * 40
@@ -101,6 +97,6 @@ tempfile.unlink
 tempfile2.close
 tempfile2.unlink
 
-puts "\n" + "=" * 60
+puts "\n#{"=" * 60}"
 puts "All tests completed!"
 puts "=" * 60

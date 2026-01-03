@@ -15,7 +15,7 @@ module Isort
       def check_syntax(code)
         # Use Ruby's built-in syntax check
         catch(:valid) do
-          eval("BEGIN { throw :valid }; #{code}", nil, "(syntax_check)", 0)
+          eval("BEGIN { throw :valid }; #{code}", nil, __FILE__, __LINE__)
         end
         nil
       rescue SyntaxError => e
@@ -45,7 +45,7 @@ module Isort
           f.write(code)
           f.flush
 
-          stdout, stderr, status = Open3.capture3("ruby", "-c", f.path)
+          _, _, status = Open3.capture3("ruby", "-c", f.path)
           status.success?
         end
       rescue StandardError
@@ -63,10 +63,10 @@ module Isort
           f.write(code)
           f.flush
 
-          stdout, stderr, status = Open3.capture3("ruby", "-c", f.path)
+          _, stderr, status = Open3.capture3("ruby", "-c", f.path)
           status.success? ? nil : stderr.strip
         end
-      rescue StandardError => e
+      rescue StandardError
         # If we can't run ruby -c, fall back to eval-based check
         check_syntax(code)
       end

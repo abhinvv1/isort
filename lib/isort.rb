@@ -183,24 +183,24 @@ module Isort
       processor = FileProcessor.new(file, options)
 
       if options[:check]
-        return handle_check(file, processor, options)
+        handle_check(file, processor, options)
       elsif options[:diff]
-        return handle_diff(file, processor, options)
+        handle_diff(file, processor, options)
       else
-        return handle_sort(file, processor, options)
+        handle_sort(file, processor, options)
       end
     rescue ExistingSyntaxErrors => e
       puts "ERROR: #{e.message}" unless options[:quiet]
-      return 1
+      1
     rescue IntroducedSyntaxErrors => e
       puts "ERROR: #{e.message}" unless options[:quiet]
-      return 1
+      1
     rescue FileSkipped => e
       puts e.message if options[:verbose]
-      return 0
+      0
     rescue StandardError => e
       puts "Error processing #{file}: #{e.message}" unless options[:quiet]
-      return 1
+      1
     end
 
     def self.handle_check(file, processor, options)
@@ -229,8 +229,8 @@ module Isort
       changed = processor.process
       if changed
         puts "Imports sorted in #{file}" unless options[:quiet]
-      else
-        puts "#{file} - no changes needed" if options[:verbose]
+      elsif options[:verbose]
+        puts "#{file} - no changes needed"
       end
       0
     end
@@ -255,7 +255,7 @@ module Isort
       files.each do |file|
         result = process_file(file, options.merge(quiet: true))
         total += 1
-        if result == 0
+        if result.zero?
           changed += 1 if options[:check] || options[:diff]
         else
           errors += 1
@@ -281,7 +281,7 @@ module Isort
         end
       end
 
-      errors > 0 || (options[:check] && changed < total) ? 1 : 0
+      errors.positive? || (options[:check] && changed < total) ? 1 : 0
     end
   end
 end

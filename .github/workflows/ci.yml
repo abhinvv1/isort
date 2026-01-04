@@ -44,8 +44,12 @@ jobs:
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: ${{ matrix.ruby }}
-          bundler-cache: true
+          bundler-cache: ${{ matrix.ruby != 'head' }}
           bundler: ${{ matrix.ruby == 'head' && 'latest' || 'default' }}
+
+      - name: Install dependencies (head)
+        if: matrix.ruby == 'head'
+        run: bundle install
 
       - name: Run Tests
         run: bundle exec rspec

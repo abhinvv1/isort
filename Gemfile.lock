@@ -53,7 +53,7 @@ PLATFORMS
   x86_64-linux
 
 DEPENDENCIES
-  bundler (~> 2.0)
+  bundler (>= 2.0)
   isort!
   rake (~> 13.0)
   rspec

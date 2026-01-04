@@ -3,6 +3,7 @@
 A Ruby gem that automatically sorts and organizes import statements in Ruby files. Inspired by Python's [isort](https://pycqa.github.io/isort/), it brings the same powerful import organization to Ruby projects.
 
 [![Gem Version](https://badge.fury.io/rb/isort.svg)](https://rubygems.org/gems/isort)
+[![CI](https://github.com/abhinvv1/isort/workflows/CI/badge.svg)](https://github.com/abhinvv1/isort/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## Features

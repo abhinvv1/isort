@@ -45,6 +45,7 @@ jobs:
         with:
           ruby-version: ${{ matrix.ruby }}
           bundler-cache: true
+          bundler: ${{ matrix.ruby == 'head' && 'latest' || 'default' }}
 
       - name: Run Tests
         run: bundle exec rspec
